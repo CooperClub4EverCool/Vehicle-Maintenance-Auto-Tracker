@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Receipt Scanner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 p-4">
+
+<div class="max-w-md mx-auto bg-white p-6 rounded-xl shadow space-y-4">
+  <h1 class="text-2xl font-bold text-center text-blue-600">AI Receipt Scanner</h1>
+  <p class="text-sm text-gray-600 text-center">Scan receipts for vehicle maintenance tracking</p>
+
+  <div class="space-y-2">
+    <label class="block text-sm font-medium text-gray-700">Select Receipt Image</label>
+    <input type="file" id="fileInput" accept="image/*" capture="environment" class="w-full border-2 border-gray-300 rounded p-2" />
+  </div>
+
+  <img id="preview" class="hidden rounded max-h-64 w-full object-cover" />
+
+  <button onclick="upload()" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded font-semibold transition">
+    Scan & Submit
+  </button>
+
+  <p id="status" class="text-sm text-center text-gray-600"></p>
+
+  <div id="result" class="hidden bg-blue-50 border border-blue-200 p-4 rounded space-y-2 text-sm">
+    <p><b>Vendor:</b> <span id="vendor">-</span></p>
+    <p><b>Date:</b> <span id="date">-</span></p>
+    <p><b>Amount:</b> $<span id="amount">-</span></p>
+    <p><b>Category:</b> <span id="category">-</span></p>
+    <p><b>Confidence:</b> <span id="confidence">-</span>%</p>
+    <a id="receiptLink" href="#" target="_blank" class="text-blue-600 hover:underline block">View Full Receipt →</a>
+  </div>
+</div>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbymn_Nmrb4A8j6lI3xmutW1qjJzZP57k3aggzMMB6cBG9mkeGnXg8-fi71DXLCPNAIdbA/exec";
+
+const fileInput = document.getElementById("fileInput");
+const preview = document.getElementById("preview");
+const statusText = document.getElementById("status");
+const resultBox = document.getElementById("result");
+const submitBtn = document.getElementById("submitBtn");
+
+let file = null;
+
+fileInput.addEventListener("change", (e) => {
+  file = e.target.files[0];
+  if (file) {
+    preview.src = URL.createObjectURL(file);
+    preview.classList.remove("hidden");
+    statusText.innerText = "";
+  }
+});
+
+async function upload() {
+  if (!file) {
+    statusText.innerText = "⚠️ Please select an image first";
+    return;
+  }
+
+  statusText.innerText = "🔍 Processing...";
+  submitBtn.disabled = true;
+
+  const reader = new FileReader();
+
+  reader.onloadend = async () => {
+    try {
+      const base64 = reader.result.split(",")[1];
+
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          file: base64,
+          fileName: file.name
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error("Server error");
+      }
+
+      const data = await res.json();
+
+      // Update result display
+      document.getElementById("vendor").innerText = data.vendor || "Unknown";
+      document.getElementById("date").innerText = data.date || "Unknown";
+      document.getElementById("amount").innerText = data.amount || "0.00";
+      document.getElementById("category").innerText = data.category || "Other";
+      document.getElementById("confidence").innerText = Math.round((data.confidence || 0) * 100);
+      
+      if (data.fileUrl) {
+        document.getElementById("receiptLink").href = data.fileUrl;
+      }
+
+      resultBox.classList.remove("hidden");
+
+      statusText.innerText =
+        data.confidence < 0.8
+          ? "⚠️ Low confidence — please verify details"
+          : "✅ Receipt scanned successfully!";
+    } catch (error) {
+      statusText.innerText = "❌ Error processing image. Please try again.";
+      console.error("Upload error:", error);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  };
+
+  reader.onerror = () => {
+    statusText.innerText = "❌ Error reading file";
+    submitBtn.disabled = false;
+  };
+
+  reader.readAsDataURL(file);
+}
+</script>
+
+</body>
+</html>
