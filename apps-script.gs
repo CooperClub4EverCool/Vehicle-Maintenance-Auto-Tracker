@@ -38,6 +38,7 @@ function doPost(e) {
       JSON.stringify(receiptData)
     ).setMimeType(ContentService.MimeType.JSON);
   } catch (error) {
+    Logger.log("doPost error: " + error.toString());
     return ContentService.createTextOutput(
       JSON.stringify({ error: error.toString() })
     ).setMimeType(ContentService.MimeType.JSON);
@@ -66,6 +67,7 @@ function processReceiptImage(file) {
   
   const blob = file.getBlob();
   const base64 = Utilities.base64Encode(blob.getBytes());
+  const mimeType = file.getMimeType(); // Get actual MIME type
 
   const payload = {
     model: "claude-3-5-sonnet-20241022",
@@ -78,7 +80,7 @@ function processReceiptImage(file) {
             type: "image",
             source: {
               type: "base64",
-              media_type: "image/jpeg",
+              media_type: mimeType, // Use actual MIME type
               data: base64
             }
           },
@@ -113,11 +115,36 @@ Be precise and extract only what you see. If unsure, set confidence lower.`
   };
 
   const response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", options);
-  const result = JSON.parse(response.getContentText());
+  const responseCode = response.getResponseCode();
+  const responseText = response.getContentText();
 
-  if (result.content && result.content[0]) {
-    const text = result.content[0].text;
-    return JSON.parse(text);
+  // Check for HTTP errors
+  if (responseCode !== 200) {
+    Logger.log("Claude API Error: " + responseCode + " - " + responseText);
+    return { error: "Claude API failed: " + responseCode, confidence: 0 };
+  }
+
+  try {
+    const result = JSON.parse(responseText);
+
+    if (result.error) {
+      Logger.log("Claude Error: " + result.error.message);
+      return { error: result.error.message, confidence: 0 };
+    }
+
+    if (result.content && result.content[0] && result.content[0].text) {
+      const text = result.content[0].text;
+      
+      try {
+        return JSON.parse(text);
+      } catch (parseError) {
+        Logger.log("Failed to parse Claude response: " + text);
+        return { error: "Invalid response format", confidence: 0 };
+      }
+    }
+  } catch (error) {
+    Logger.log("Failed to parse API response: " + error.toString());
+    return { error: "Failed to process receipt", confidence: 0 };
   }
 
   return { error: "Failed to process receipt", confidence: 0 };
@@ -180,11 +207,36 @@ Be precise and extract only what you see. If unsure, set confidence lower.`
   };
 
   const response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", options);
-  const result = JSON.parse(response.getContentText());
+  const responseCode = response.getResponseCode();
+  const responseText = response.getContentText();
 
-  if (result.content && result.content[0]) {
-    const text = result.content[0].text;
-    return JSON.parse(text);
+  // Check for HTTP errors
+  if (responseCode !== 200) {
+    Logger.log("Claude API Error: " + responseCode + " - " + responseText);
+    return { error: "Claude API failed: " + responseCode, confidence: 0 };
+  }
+
+  try {
+    const result = JSON.parse(responseText);
+
+    if (result.error) {
+      Logger.log("Claude Error: " + result.error.message);
+      return { error: result.error.message, confidence: 0 };
+    }
+
+    if (result.content && result.content[0] && result.content[0].text) {
+      const text = result.content[0].text;
+      
+      try {
+        return JSON.parse(text);
+      } catch (parseError) {
+        Logger.log("Failed to parse Claude response: " + text);
+        return { error: "Invalid response format", confidence: 0 };
+      }
+    }
+  } catch (error) {
+    Logger.log("Failed to parse API response: " + error.toString());
+    return { error: "Failed to process receipt", confidence: 0 };
   }
 
   return { error: "Failed to process receipt", confidence: 0 };
@@ -208,33 +260,37 @@ function saveToSheet(receiptData, fileUrl) {
     
     Logger.log("Receipt saved to sheet: " + receiptData.vendor);
   } catch (error) {
-    Logger.log("Error saving to sheet: " + error);
+    Logger.log("Error saving to sheet: " + error.toString());
   }
 }
 
 // Monitor Google Drive folder for new files (run as trigger)
 function processNewReceipts() {
-  const folder = DriveApp.getFolderById(FOLDER_ID);
-  
-  // Get both JPEG and PDF files
-  const jpegFiles = folder.getFilesByType(MimeType.JPEG);
-  const pdfFiles = folder.getFilesByType(MimeType.PDF);
-  
-  let processed = 0;
+  try {
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    
+    // Get both JPEG and PDF files
+    const jpegFiles = folder.getFilesByType(MimeType.JPEG);
+    const pdfFiles = folder.getFilesByType(MimeType.PDF);
+    
+    let processed = 0;
 
-  // Process JPEG files
-  while (jpegFiles.hasNext()) {
-    const file = jpegFiles.next();
-    processed += processFileIfNew(file);
+    // Process JPEG files
+    while (jpegFiles.hasNext()) {
+      const file = jpegFiles.next();
+      processed += processFileIfNew(file);
+    }
+
+    // Process PDF files
+    while (pdfFiles.hasNext()) {
+      const file = pdfFiles.next();
+      processed += processFileIfNew(file);
+    }
+
+    Logger.log(`Total receipts processed: ${processed}`);
+  } catch (error) {
+    Logger.log("processNewReceipts error: " + error.toString());
   }
-
-  // Process PDF files
-  while (pdfFiles.hasNext()) {
-    const file = pdfFiles.next();
-    processed += processFileIfNew(file);
-  }
-
-  Logger.log(`Total receipts processed: ${processed}`);
 }
 
 // Helper function to process file if not already processed
@@ -259,7 +315,7 @@ function processFileIfNew(file) {
     Logger.log(`Processed: ${file.getName()}`);
     return 1;
   } catch (error) {
-    Logger.log(`Error processing ${file.getName()}: ${error}`);
+    Logger.log(`Error processing ${file.getName()}: ${error.toString()}`);
     return 0;
   }
 }
