@@ -5,7 +5,7 @@
 // 4. Allow permissions and copy the deployment URL
 
 const FOLDER_ID = "1RHqADYpsbyUDBVGKWbOtfoaNOPpHXZMH"; // Your Vehicle Maintenance folder
-const SHEET_ID = "YOUR_GOOGLE_SHEET_ID"; // Optional: replace with your sheet ID to log receipts
+const SHEET_ID = "1iNfqdeIWoT1X6S_fJE4Oe3mDMnSmgZh0_P0Wl9cdhn4"; // Your Receipt Tracking Sheet
 
 // Process incoming receipt uploads
 function doPost(e) {
@@ -29,8 +29,8 @@ function doPost(e) {
     // Process receipt (handles both images and PDFs)
     const receiptData = processReceipt(file);
 
-    // Save to Google Sheet (optional)
-    if (SHEET_ID && SHEET_ID !== "YOUR_GOOGLE_SHEET_ID") {
+    // Save to Google Sheet
+    if (SHEET_ID) {
       saveToSheet(receiptData, file.getUrl());
     }
 
@@ -192,18 +192,24 @@ Be precise and extract only what you see. If unsure, set confidence lower.`
 
 // Save receipt data to Google Sheet
 function saveToSheet(receiptData, fileUrl) {
-  const sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
-  
-  sheet.appendRow([
-    new Date(),
-    receiptData.vendor,
-    receiptData.date,
-    receiptData.amount,
-    receiptData.category,
-    (receiptData.items || []).join(", "),
-    receiptData.confidence,
-    fileUrl
-  ]);
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
+    
+    sheet.appendRow([
+      new Date().toLocaleString(),
+      receiptData.vendor || "Unknown",
+      receiptData.date || "Unknown",
+      receiptData.amount || "0.00",
+      receiptData.category || "Other",
+      (receiptData.items || []).join(", ") || "N/A",
+      Math.round((receiptData.confidence || 0) * 100) + "%",
+      fileUrl
+    ]);
+    
+    Logger.log("Receipt saved to sheet: " + receiptData.vendor);
+  } catch (error) {
+    Logger.log("Error saving to sheet: " + error);
+  }
 }
 
 // Monitor Google Drive folder for new files (run as trigger)
@@ -243,7 +249,7 @@ function processFileIfNew(file) {
     const receiptData = processReceipt(file);
 
     // Save to sheet
-    if (SHEET_ID && SHEET_ID !== "YOUR_GOOGLE_SHEET_ID") {
+    if (SHEET_ID) {
       saveToSheet(receiptData, file.getUrl());
     }
 
