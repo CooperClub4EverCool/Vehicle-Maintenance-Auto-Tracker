@@ -4,8 +4,8 @@
 // 3. Deploy > New deployment > Web app > Execute as [your email]
 // 4. Allow permissions and copy the deployment URL
 
-const FOLDER_ID = "YOUR_GOOGLE_DRIVE_FOLDER_ID"; // Replace with your folder ID
-const SHEET_ID = "YOUR_GOOGLE_SHEET_ID"; // Replace with your sheet ID (optional)
+const FOLDER_ID = "1RHqADYpsbyUDBVGKWbOtfoaNOPpHXZMH"; // Your Vehicle Maintenance folder
+const SHEET_ID = "YOUR_GOOGLE_SHEET_ID"; // Optional: replace with your sheet ID to log receipts
 
 // Process incoming receipt uploads
 function doPost(e) {
@@ -29,7 +29,7 @@ function doPost(e) {
     const receiptData = processReceiptWithClaude(file);
 
     // Save to Google Sheet (optional)
-    if (SHEET_ID) {
+    if (SHEET_ID && SHEET_ID !== "YOUR_GOOGLE_SHEET_ID") {
       saveToSheet(receiptData, file.getUrl());
     }
 
@@ -46,6 +46,11 @@ function doPost(e) {
 // Process receipt with Claude AI
 function processReceiptWithClaude(file) {
   const CLAUDE_API_KEY = PropertiesService.getScriptProperties().getProperty("CLAUDE_API_KEY");
+  
+  if (!CLAUDE_API_KEY) {
+    throw new Error("CLAUDE_API_KEY not set. Add it in Project Settings > Script Properties");
+  }
+  
   const blob = file.getBlob();
   const base64 = Utilities.base64Encode(blob.getBytes());
 
@@ -122,29 +127,37 @@ function saveToSheet(receiptData, fileUrl) {
 }
 
 // Monitor Google Drive folder for new files (run as trigger)
-function processNewRecepts() {
+function processNewReceipts() {
   const folder = DriveApp.getFolderById(FOLDER_ID);
   const files = folder.getFilesByType(MimeType.JPEG);
+  let processed = 0;
 
   while (files.hasNext()) {
     const file = files.next();
     
-    // Skip if already processed (check metadata)
-    if (file.getDescription().includes("PROCESSED")) {
+    // Skip if already processed (check description)
+    if (file.getDescription() && file.getDescription().includes("PROCESSED")) {
       continue;
     }
 
-    // Process file
-    const receiptData = processReceiptWithClaude(file);
+    try {
+      // Process file
+      const receiptData = processReceiptWithClaude(file);
 
-    // Save to sheet
-    if (SHEET_ID) {
-      saveToSheet(receiptData, file.getUrl());
+      // Save to sheet
+      if (SHEET_ID && SHEET_ID !== "YOUR_GOOGLE_SHEET_ID") {
+        saveToSheet(receiptData, file.getUrl());
+      }
+
+      // Mark as processed
+      file.setDescription("PROCESSED - " + new Date());
+      processed++;
+
+      Logger.log(`Processed: ${file.getName()}`);
+    } catch (error) {
+      Logger.log(`Error processing ${file.getName()}: ${error}`);
     }
-
-    // Mark as processed
-    file.setDescription("PROCESSED");
-
-    Logger.log(`Processed: ${file.getName()}`);
   }
+
+  Logger.log(`Total receipts processed: ${processed}`);
 }
