@@ -257,3 +257,30 @@ function processFileIfNew(file) {
     return 0;
   }
 }
+
+// Create time-based trigger for automatic processing
+// This function is called once to set up the trigger
+function createAutoProcessTrigger() {
+  // Delete any existing triggers first
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === "processNewReceipts") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  // Create new trigger to run every 5 minutes
+  ScriptApp.newTrigger("processNewReceipts")
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+
+  Logger.log("Auto-processing trigger created - will run every 5 minutes");
+}
+
+// Test function to verify setup
+function testAutoProcessing() {
+  Logger.log("Testing auto-processing...");
+  processNewReceipts();
+  Logger.log("Test complete - check logs for details");
+}
