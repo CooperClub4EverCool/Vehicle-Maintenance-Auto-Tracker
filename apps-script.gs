@@ -7,13 +7,44 @@
 const FOLDER_ID = "1RHqADYpsbyUDBVGKWbOtfoaNOPpHXZMH"; // Your Vehicle Maintenance folder
 const SHEET_ID = "1iNfqdeIWoT1X6S_fJE4Oe3mDMnSmgZh0_P0Wl9cdhn4"; // Your Receipt Tracking Sheet
 
+// Handle CORS and GET requests
+function doGet(e) {
+  return ContentService.createTextOutput(
+    JSON.stringify({ message: "AI Receipt Scanner API - Use POST to submit receipts" })
+  ).setMimeType(ContentService.MimeType.JSON);
+}
+
 // Process incoming receipt uploads
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
+    // Check if e and e.postData exist
+    if (!e || !e.postData) {
+      Logger.log("Error: No POST data received");
+      return ContentService.createTextOutput(
+        JSON.stringify({ error: "No POST data received" })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const postData = e.postData.contents;
+    
+    if (!postData) {
+      Logger.log("Error: POST data is empty");
+      return ContentService.createTextOutput(
+        JSON.stringify({ error: "POST data is empty" })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    const data = JSON.parse(postData);
     const base64 = data.file;
     const fileName = data.fileName;
     const mimeType = data.mimeType || "image/jpeg";
+
+    if (!base64 || !fileName) {
+      Logger.log("Error: Missing file or fileName");
+      return ContentService.createTextOutput(
+        JSON.stringify({ error: "Missing file or fileName" })
+      ).setMimeType(ContentService.MimeType.JSON);
+    }
 
     // Decode base64 and create file
     const blob = Utilities.newBlob(
@@ -25,6 +56,8 @@ function doPost(e) {
     // Upload to Google Drive folder
     const folder = DriveApp.getFolderById(FOLDER_ID);
     const file = folder.createFile(blob);
+
+    Logger.log("File uploaded: " + file.getName());
 
     // Process receipt (handles both images and PDFs)
     const receiptData = processReceipt(file);
