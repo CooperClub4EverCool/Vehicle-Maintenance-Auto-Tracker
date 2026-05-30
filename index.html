@@ -14,11 +14,15 @@
   <p class="text-sm text-gray-600 text-center">Scan receipts for vehicle maintenance tracking</p>
 
   <div class="space-y-2">
-    <label class="block text-sm font-medium text-gray-700">Select Receipt Image</label>
-    <input type="file" id="fileInput" accept="image/*" capture="environment" class="w-full border-2 border-gray-300 rounded p-2" />
+    <label class="block text-sm font-medium text-gray-700">Select Receipt (Image or PDF)</label>
+    <input type="file" id="fileInput" accept="image/*,.pdf" capture="environment" class="w-full border-2 border-gray-300 rounded p-2" />
   </div>
 
   <img id="preview" class="hidden rounded max-h-64 w-full object-cover" />
+  
+  <div id="pdfPreview" class="hidden bg-gray-200 p-3 rounded text-center">
+    <p class="text-sm text-gray-700">📄 PDF Selected</p>
+  </div>
 
   <button onclick="upload()" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-2 rounded font-semibold transition">
     Scan & Submit
@@ -31,6 +35,7 @@
     <p><b>Date:</b> <span id="date">-</span></p>
     <p><b>Amount:</b> $<span id="amount">-</span></p>
     <p><b>Category:</b> <span id="category">-</span></p>
+    <p><b>Items:</b> <span id="items">-</span></p>
     <p><b>Confidence:</b> <span id="confidence">-</span>%</p>
     <a id="receiptLink" href="#" target="_blank" class="text-blue-600 hover:underline block">View Full Receipt →</a>
   </div>
@@ -41,6 +46,7 @@ const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbymn_Nmrb4A8j6lI3xmu
 
 const fileInput = document.getElementById("fileInput");
 const preview = document.getElementById("preview");
+const pdfPreview = document.getElementById("pdfPreview");
 const statusText = document.getElementById("status");
 const resultBox = document.getElementById("result");
 const submitBtn = document.getElementById("submitBtn");
@@ -50,15 +56,22 @@ let file = null;
 fileInput.addEventListener("change", (e) => {
   file = e.target.files[0];
   if (file) {
-    preview.src = URL.createObjectURL(file);
-    preview.classList.remove("hidden");
+    preview.classList.add("hidden");
+    pdfPreview.classList.add("hidden");
     statusText.innerText = "";
+    
+    if (file.type === "application/pdf") {
+      pdfPreview.classList.remove("hidden");
+    } else {
+      preview.src = URL.createObjectURL(file);
+      preview.classList.remove("hidden");
+    }
   }
 });
 
 async function upload() {
   if (!file) {
-    statusText.innerText = "⚠️ Please select an image first";
+    statusText.innerText = "⚠️ Please select a file first";
     return;
   }
 
@@ -70,6 +83,7 @@ async function upload() {
   reader.onloadend = async () => {
     try {
       const base64 = reader.result.split(",")[1];
+      const mimeType = file.type || "application/octet-stream";
 
       const res = await fetch(SCRIPT_URL, {
         method: "POST",
@@ -78,7 +92,8 @@ async function upload() {
         },
         body: JSON.stringify({
           file: base64,
-          fileName: file.name
+          fileName: file.name,
+          mimeType: mimeType
         })
       });
 
@@ -88,11 +103,18 @@ async function upload() {
 
       const data = await res.json();
 
+      if (data.error) {
+        statusText.innerText = "❌ " + data.error;
+        submitBtn.disabled = false;
+        return;
+      }
+
       // Update result display
       document.getElementById("vendor").innerText = data.vendor || "Unknown";
       document.getElementById("date").innerText = data.date || "Unknown";
       document.getElementById("amount").innerText = data.amount || "0.00";
       document.getElementById("category").innerText = data.category || "Other";
+      document.getElementById("items").innerText = (data.items || []).join(", ") || "N/A";
       document.getElementById("confidence").innerText = Math.round((data.confidence || 0) * 100);
       
       if (data.fileUrl) {
@@ -106,7 +128,7 @@ async function upload() {
           ? "⚠️ Low confidence — please verify details"
           : "✅ Receipt scanned successfully!";
     } catch (error) {
-      statusText.innerText = "❌ Error processing image. Please try again.";
+      statusText.innerText = "❌ Error processing file. Please try again.";
       console.error("Upload error:", error);
     } finally {
       submitBtn.disabled = false;
